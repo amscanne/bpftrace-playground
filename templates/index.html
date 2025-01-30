@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>bpftrace Playground</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #editor-container { display: flex; flex-direction: column; flex-grow: 1; }
+        #file-controls { padding: 5px; background: #e0e0e0; }
+        #code { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: none; }
+        #output { background: #f0f0f0; padding: 10px; white-space: pre-wrap; height: 250px; overflow-y: scroll; box-sizing: border-box; }
+        #controls { padding: 5px; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.2.1/ansi_up.min.js"></script>
+</head>
+<body>
+    <div id="file-controls">
+        <label for="file-selector">File:</label>
+        <select id="file-selector"></select>
+        <button id="add-file">+</button>
+        <button id="delete-file">-</button>
+    </div>
+    <div id="editor-container">
+        <textarea id="code">{{.Code}}</textarea>
+    </div>
+    <div id="controls">
+        <button id="run">Run</button>
+        <input type="hidden" id="version" value="{{.Version}}">
+        <input type="hidden" id="workload" value="{{.Workload}}">
+        <input type="hidden" id="timeout" value="{{.Timeout}}">
+        <input type="hidden" id="initial-files" value="{{.Files}}">
+    </div>
+    <div id="output"></div>
+
+    <script>
+        const codeElement = document.getElementById('code');
+        const outputElement = document.getElementById('output');
+        const runButton = document.getElementById('run');
+        const versionElement = document.getElementById('version');
+        const workloadElement = document.getElementById('workload');
+        const timeoutElement = document.getElementById('timeout');
+        const initialFilesElement = document.getElementById('initial-files');
+        const fileSelector = document.getElementById('file-selector');
+        const addFileButton = document.getElementById('add-file');
+        const deleteFileButton = document.getElementById('delete-file');
+
+        const ansi_up = new AnsiUp();
+
+        // All file content is stored here. 'main' is a special key.
+        let files = {
+            'main': codeElement.value,
+            ...JSON.parse(initialFilesElement.value)
+        };
+        let currentFile = 'main'; // The currently selected file key.
+
+        function updateFileSelector() {
+            const selectedValue = fileSelector.value || currentFile;
+            fileSelector.innerHTML = '';
+
+            // Ensure 'main' is always first.
+            const mainOption = document.createElement('option');
+            mainOption.value = 'main';
+            mainOption.textContent = 'Main Script';
+            fileSelector.appendChild(mainOption);
+
+            for (const filename in files) {
+                if (filename === 'main') continue;
+                const option = document.createElement('option');
+                option.value = filename;
+                option.textContent = filename;
+                fileSelector.appendChild(option);
+            }
+            fileSelector.value = selectedValue;
+        }
+
+        function switchToFile(filename) {
+            // Save current file's content before switching.
+            files[currentFile] = codeElement.value;
+
+            // Load new file's content.
+            codeElement.value = files[filename];
+            currentFile = filename;
+            fileSelector.value = filename;
+            deleteFileButton.disabled = (filename === 'main');
+        }
+
+        fileSelector.addEventListener('change', () => {
+            switchToFile(fileSelector.value);
+        });
+
+        addFileButton.addEventListener('click', () => {
+            const filename = prompt('Enter new filename:');
+            if (filename && !files.hasOwnProperty(filename)) {
+                files[filename] = '';
+                updateFileSelector();
+                switchToFile(filename);
+            } else if (filename) {
+                alert('Invalid or duplicate filename.');
+            }
+        });
+
+        deleteFileButton.addEventListener('click', () => {
+            if (currentFile !== 'main' && confirm(`Are you sure you want to delete ${currentFile}?`)) {
+                const toDelete = currentFile;
+                switchToFile('main');
+                delete files[toDelete];
+                updateFileSelector();
+            }
+        });
+        
+        // Initial setup
+        updateFileSelector();
+        switchToFile('main');
+
+        runButton.addEventListener('click', () => {
+            // Save current file before running
+            files[currentFile] = codeElement.value;
+
+            const version = versionElement.value;
+            const workload = workloadElement.value;
+            const timeout = parseInt(timeoutElement.value, 10);
+            outputElement.innerHTML = '';
+
+            const socket = new WebSocket(`ws://${window.location.host}/execute`);
+
+            socket.onopen = () => {
+                // Separate main script from extra files for the request
+                const mainScript = files['main'];
+                const extraFiles = { ...files };
+                delete extraFiles['main'];
+
+                const request = {
+                    version: version,
+                    workload: workload,
+                    code: mainScript,
+                    files: extraFiles,
+                    timeout: timeout,
+                };
+                socket.send(JSON.stringify(request));
+            };
+
+            socket.onmessage = (event) => {
+                const response = JSON.parse(event.data);
+                if (response.type === 'exit') {
+                    const exitData = JSON.parse(response.data);
+                    const message = document.createElement('div');
+                    message.style.fontSize = 'small';
+                    message.style.color = 'grey';
+                    message.style.fontStyle = 'italic';
+
+                    let msgText;
+                    if (exitData.exit_code === 0) {
+                        msgText = "Execution finished successfully.";
+                    } else {
+                        msgText = `Execution finished. (Exit Code: ${exitData.exit_code})`;
+                    }
+                    message.textContent = `\n${msgText}`;
+                    outputElement.appendChild(message);
+                    socket.close();
+                } else {
+                    const message = document.createElement('div');
+                    const html = ansi_up.ansi_to_html(response.data);
+                    message.innerHTML = html;
+                    outputElement.appendChild(message);
+                }
+                outputElement.scrollTop = outputElement.scrollHeight;
+            };
+
+            socket.onclose = () => {
+                runButton.disabled = false;
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                const message = document.createElement('div');
+                message.textContent = 'WebSocket error. See console for details.';
+                message.style.color = 'red';
+                outputElement.appendChild(message);
+                runButton.disabled = false;
+            };
+
+            runButton.disabled = true;
+        });
+    </script>
+</body>
+</html>
