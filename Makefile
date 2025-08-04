@@ -7,22 +7,19 @@ IMAGE_TAG ?= latest
 REPO ?= bpftrace-playground
 IMAGE_URI = $(REGION)-docker.pkg.dev/$(PROJECT)/$(REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
 
-GO_FILES := $(shell find . -type f -name '*.go')
-STATIC_FILES := $(shell find templates -type f)
+SRC_FILES := $(shell find . -name '*.go' -o -name '*.html')
 OTHER_FILES := flake.nix go.mod go.sum
 NIX_SHELL = nix develop -c --
 
-.PHONY: all push repo service-account deploy clean
-
-all: deploy
+.PHONY: push repo service-account deploy clean
 
 # Build the container using Nix if source files have changed.
-image: $(GO_FILES) $(STATIC_FILES) $(OTHER_FILES)
+image: $(SRC_FILES) $(OTHER_FILES)
 	@echo "--> Building container with Nix..."
 	@nix build .#default -o $@
 
 # Push the container to Google Artifact Registry using skopeo.
-push: image repo
+push:
 	@echo "--> Pushing image to $(IMAGE_URI) with skopeo..."
 	@$(NIX_SHELL) gcloud auth print-access-token | $(NIX_SHELL) skopeo copy --dest-creds "oauth2accesstoken:$$(cat)" docker-archive:image docker://$(IMAGE_URI)
 
@@ -48,7 +45,7 @@ service-account:
 			--project=$(PROJECT))
 
 # Deploy the service to Cloud Run.
-deploy: push service-account
+deploy:
 	@echo "--> Deploying service to Cloud Run in region $(REGION)..."
 	@$(NIX_SHELL) gcloud run deploy $(IMAGE_NAME) \
 		--image=$(IMAGE_URI) \

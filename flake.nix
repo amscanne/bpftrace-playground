@@ -20,8 +20,11 @@
             tag = "latest";
             copyToRoot = [ binary pkgs.bash ];
             config = {
-              Cmd = [ "${binary}/bin/bpftrace-playground" ];
-              ExposedPorts = { "8080/tcp" = {}; };
+              Cmd = [ "/bin/bpftrace-playground" ];
+              WorkingDir = "/work";
+              ExposedPorts = {
+                "8080/tcp" = {};
+              };
             };
           };
           shell = pkgs.mkShell {

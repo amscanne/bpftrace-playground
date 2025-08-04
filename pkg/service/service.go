@@ -29,8 +29,8 @@ type PageData struct {
 	Files    string
 }
 
-//go:embed templates/*
-var templates embed.FS
+//go:embed templates/*.html
+var templateFiles embed.FS
 
 func NewServer(cacheDir string, maxCache int, maxTimeout int) (*Server, error) {
 	downloader, err := download.NewManager(cacheDir, maxCache)
@@ -38,7 +38,7 @@ func NewServer(cacheDir string, maxCache int, maxTimeout int) (*Server, error) {
 		return nil, err
 	}
 
-	tmpl, err := template.New("").ParseFS(templates, "templates/*")
+	tmpl, err := template.ParseFS(templateFiles, "templates/index.html")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
