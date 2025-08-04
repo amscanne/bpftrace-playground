@@ -6,6 +6,7 @@ IMAGE_NAME ?= bpftrace-playground
 IMAGE_TAG ?= latest
 REPO ?= bpftrace-playground
 IMAGE_URI = $(REGION)-docker.pkg.dev/$(PROJECT)/$(REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
+APP_ENGINE_SERVICE ?= default
 
 SRC_FILES := $(shell find . -name '*.go' -o -name '*.html')
 OTHER_FILES := flake.nix go.mod go.sum
@@ -44,22 +45,16 @@ service-account:
 			--description="Service account for bpftrace-playground" \
 			--project=$(PROJECT))
 
-# Deploy the service to Cloud Run.
+# Deploy the service to App Engine flex.
 deploy:
-	@echo "--> Deploying service to Cloud Run in region $(REGION)..."
-	@$(NIX_SHELL) gcloud run deploy $(IMAGE_NAME) \
-		--image=$(IMAGE_URI) \
-		--service-account=$(SERVICE_ACCOUNT_EMAIL) \
-		--region=$(REGION) \
+	@echo "--> Deploying service to App Engine flex..."
+	@echo "--> Using image: $(IMAGE_URI)"
+	@$(NIX_SHELL) gcloud app deploy app.yaml \
+		--image-url=$(IMAGE_URI) \
 		--project=$(PROJECT) \
-		--port=8080 \
-		--concurrency=1 \
-		--max-instances=10 \
-		--timeout=300 \
-		--memory=1Gi \
-		--cpu=1 \
-		--execution-environment=gen2 \
-		--allow-unauthenticated
+		--quiet \
+		--promote \
+		--stop-previous-version
 
 clean:
 	@echo "Cleaning up..."

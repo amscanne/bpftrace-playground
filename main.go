@@ -3,18 +3,39 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/amscanne/bpftrace-playground/pkg/service"
 )
 
+var (
+	port       = flag.String("port", getEnvOrDefault("PORT", "8088"), "Port to listen on")
+	cacheDir   = flag.String("cache-dir", getEnvOrDefault("CACHE_DIR", "/tmp/cache"), "Cache directory")
+	maxCache   = flag.Int("max-cache", getEnvIntOrDefault("MAX_CACHE", 100), "Maximum cache entries")
+	maxTimeout = flag.Int("max-timeout", getEnvIntOrDefault("MAX_TIMEOUT", 30), "Maximum timeout in seconds")
+)
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
 func main() {
-	port := flag.String("port", "8080", "port to listen on")
-	cacheDir := flag.String("cache-dir", "/tmp/bpftrace-binaries", "directory to cache bpftrace binaries")
-	maxCache := flag.Int("max-cache-entries", 10, "maximum number of bpftrace binaries to cache")
-	maxTimeout := flag.Int("max-timeout", 10000, "maximum timeout for bpftrace execution in milliseconds")
 	flag.Parse()
 
 	if err := service.Main(*port, *cacheDir, *maxCache, *maxTimeout); err != nil {
-		log.Fatal(err)
+		log.Fatalf("Server failed: %v", err)
 	}
 }
