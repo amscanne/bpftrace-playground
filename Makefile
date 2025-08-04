@@ -57,11 +57,11 @@ deploy: push service-account
 		--project=$(PROJECT) \
 		--port=8080 \
 		--concurrency=1 \
+		--max-instances=10 \
 		--timeout=300 \
 		--memory=1Gi \
 		--cpu=1 \
 		--execution-environment=gen2 \
-		--launch-stage=BETA \
 		--allow-unauthenticated
 
 clean:

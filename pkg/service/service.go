@@ -1,6 +1,7 @@
 package service
 
 import (
+	"embed"
 	"encoding/base64"
 	"fmt"
 	"html/template"
@@ -28,13 +29,16 @@ type PageData struct {
 	Files    string
 }
 
+//go:embed templates/*
+var templates embed.FS
+
 func NewServer(cacheDir string, maxCache int, maxTimeout int) (*Server, error) {
 	downloader, err := download.NewManager(cacheDir, maxCache)
 	if err != nil {
 		return nil, err
 	}
 
-	tmpl, err := template.ParseFiles("templates/index.html")
+	tmpl, err := template.New("").ParseFS(templates, "templates/*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -112,7 +116,7 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 		Files:    files,
 	}
 
-	err := s.template.Execute(w, data)
+	err := s.template.ExecuteTemplate(w, "templates/index.html", data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

@@ -12,31 +12,16 @@
           binary = pkgs.buildGoModule {
             name = "bpftrace-playground";
             version = "0.0.1";
-            src = ./.;
+            src = pkgs.lib.cleanSource ./.;
             vendorHash = "sha256-RQ7Opw7xK1MNZFGxCpEv7MCiKUlYTd6VfHMtL3SZLk8=";
-          };
-          base = pkgs.dockerTools.buildImage {
-            name = "base";
-            tag = "latest";
-            copyToRoot = pkgs.buildEnv {
-              name = "image-root";
-              paths = [ pkgs.bashInteractive ];
-              pathsToLink = [ "/bin" ];
-            };
           };
           service = pkgs.dockerTools.buildImage {
             name = "bpftrace-playground";
             tag = "latest";
-            fromImage = base;
-            runAsRoot = "mkdir -p /work";
-            copyToRoot = pkgs.buildEnv {
-              name = "image-root";
-              paths = [ binary ];
-              pathsToLink = [ "/bin" ];
-            };
+            copyToRoot = [ binary pkgs.bash ];
             config = {
-              Cmd = [ "/bin/bpftrace-playground" ];
-              WorkingDir = "/work";
+              Cmd = [ "${binary}/bin/bpftrace-playground" ];
+              ExposedPorts = { "8080/tcp" = {}; };
             };
           };
           shell = pkgs.mkShell {
