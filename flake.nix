@@ -21,7 +21,6 @@
             copyToRoot = [ binary pkgs.bash ];
             config = {
               Cmd = [ "/bin/bpftrace-playground" ];
-              WorkingDir = "/work";
               ExposedPorts = {
                 "8080/tcp" = {};
               };
