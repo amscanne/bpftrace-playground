@@ -116,7 +116,7 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 		Files:    files,
 	}
 
-	err := s.template.ExecuteTemplate(w, "templates/index.html", data)
+	err := s.template.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
