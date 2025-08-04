@@ -18,7 +18,11 @@
           service = pkgs.dockerTools.buildImage {
             name = "bpftrace-playground";
             tag = "latest";
-            copyToRoot = [ binary pkgs.bash ];
+            copyToRoot = [
+              binary
+              pkgs.bash
+              pkgs.cacert
+            ];
             config = {
               Cmd = [ "/bin/bpftrace-playground" ];
               ExposedPorts = {

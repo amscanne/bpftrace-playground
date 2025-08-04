@@ -120,7 +120,7 @@
             const timeout = parseInt(timeoutElement.value, 10);
             outputElement.innerHTML = '';
 
-            const socket = new WebSocket(`ws://${window.location.host}/execute`);
+            const socket = new WebSocket(`wss://${window.location.host}/execute`);
 
             socket.onopen = () => {
                 // Separate main script from extra files for the request

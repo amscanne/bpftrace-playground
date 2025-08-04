@@ -9,7 +9,7 @@ import (
 )
 
 func getCommand(ctx context.Context, path string, code string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, path, "-e", code)
+	cmd := exec.CommandContext(ctx, path, "-d", "libbpf", "-e", code)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		// While we have full kernel access, put the process in
 		// network namespace to make shelling out at least moderately
