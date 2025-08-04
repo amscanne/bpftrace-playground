@@ -13,7 +13,7 @@
             name = "bpftrace-playground";
             version = "0.0.1";
             src = ./.;
-            vendorHash = null;
+            vendorHash = "sha256-RQ7Opw7xK1MNZFGxCpEv7MCiKUlYTd6VfHMtL3SZLk8=";
           };
           base = pkgs.dockerTools.buildImage {
             name = "base";
@@ -55,3 +55,4 @@
             default = shell;
           };
         });
+}

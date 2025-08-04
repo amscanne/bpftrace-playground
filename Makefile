@@ -1,4 +1,4 @@
-PROJECT ?=
+PROJECT ?= bpftrace-playground
 REGION ?= us-central1
 SERVICE_ACCOUNT_NAME ?= bpftrace-playground
 SERVICE_ACCOUNT_EMAIL ?= $(SERVICE_ACCOUNT_NAME)@$(PROJECT).iam.gserviceaccount.com
@@ -7,13 +7,8 @@ IMAGE_TAG ?= latest
 REPO ?= bpftrace-playground
 IMAGE_URI = $(REGION)-docker.pkg.dev/$(PROJECT)/$(REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
 
-# Check for required variables.
-ifeq ($(PROJECT),)
-    $(error PROJECT is not set. Please run 'make <target> PROJECT=<your-gcp-project>')
-endif
-
 GO_FILES := $(shell find . -type f -name '*.go')
-STATIC_FILES := $(shell find static templates -type f)
+STATIC_FILES := $(shell find templates -type f)
 OTHER_FILES := flake.nix go.mod go.sum
 NIX_SHELL = nix develop -c --
 
@@ -24,7 +19,7 @@ all: deploy
 # Build the container using Nix if source files have changed.
 image: $(GO_FILES) $(STATIC_FILES) $(OTHER_FILES)
 	@echo "--> Building container with Nix..."
-	@nix build .#service -o $@
+	@nix build .#default -o $@
 
 # Push the container to Google Artifact Registry using skopeo.
 push: image repo
@@ -71,4 +66,6 @@ deploy: push service-account
 
 clean:
 	@echo "Cleaning up..."
+	@go clean -modcache
+	@rm -rf .go-build vendor
 	@rm -f image
