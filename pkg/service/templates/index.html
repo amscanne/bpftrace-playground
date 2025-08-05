@@ -3,11 +3,12 @@
 <head>
     <title>bpftrace Playground</title>
     <style>
-        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        body { font-family: sans-serif; margin: 0; }
         #editor-container { display: flex; flex-direction: column; flex-grow: 1; }
         #file-controls { padding: 5px; background: #e0e0e0; }
-        #code { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: none; }
-        #output { background: #f0f0f0; padding: 10px; white-space: pre-wrap; height: 250px; overflow-y: scroll; box-sizing: border-box; }
+        #code { width: 100%; flex-grow: 1; box-sizing: border-box; resize: none; border: none; field-sizing: content; }
+        #output { background: #f0f0f0; padding: 10px; white-space: pre-wrap; height: 100px; overflow-y: scroll; box-sizing: border-box; }
+        #status { background: #f0f0f0; padding: 10px; white-space: pre-wrap; height: 35px; overflow-y: hidden; box-sizing: border-box; }
         #controls { padding: 5px; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.2.1/ansi_up.min.js"></script>
@@ -30,10 +31,12 @@
         <input type="hidden" id="initial-files" value="{{.Files}}">
     </div>
     <div id="output"></div>
+    <div id="status"></div>
 
     <script>
         const codeElement = document.getElementById('code');
         const outputElement = document.getElementById('output');
+	const statusElement = document.getElementById('status');
         const runButton = document.getElementById('run');
         const versionElement = document.getElementById('version');
         const workloadElement = document.getElementById('workload');
@@ -107,12 +110,10 @@
             }
         });
         
-        // Initial setup
         updateFileSelector();
         switchToFile('main');
 
         runButton.addEventListener('click', () => {
-            // Save current file before running
             files[currentFile] = codeElement.value;
 
             const version = versionElement.value;
@@ -120,14 +121,23 @@
             const timeout = parseInt(timeoutElement.value, 10);
             outputElement.innerHTML = '';
 
+            updateStatus = (msg) => {
+                const message = document.createElement('div');
+                message.style.fontSize = 'small';
+                message.style.color = 'grey';
+                message.style.fontStyle = 'italic';
+                message.textContent = `${msg}`;
+                statusElement.innerHTML = '';
+                statusElement.appendChild(message);
+            };
+            updateStatus("Running...");
+
             const socket = new WebSocket(`wss://${window.location.host}/execute`);
 
             socket.onopen = () => {
-                // Separate main script from extra files for the request
                 const mainScript = files['main'];
                 const extraFiles = { ...files };
                 delete extraFiles['main'];
-
                 const request = {
                     version: version,
                     workload: workload,
@@ -142,19 +152,11 @@
                 const response = JSON.parse(event.data);
                 if (response.type === 'exit') {
                     const exitData = JSON.parse(response.data);
-                    const message = document.createElement('div');
-                    message.style.fontSize = 'small';
-                    message.style.color = 'grey';
-                    message.style.fontStyle = 'italic';
-
-                    let msgText;
                     if (exitData.exit_code === 0) {
-                        msgText = "Execution finished successfully.";
+                        updateStatus("Execution finished successfully.");
                     } else {
-                        msgText = `Execution finished. (Exit Code: ${exitData.exit_code})`;
+                        updateStatus(`Execution finished. (${exitData.msg})`);
                     }
-                    message.textContent = `\n${msgText}`;
-                    outputElement.appendChild(message);
                     socket.close();
                 } else {
                     const message = document.createElement('div');

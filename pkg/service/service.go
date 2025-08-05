@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/amscanne/bpftrace-playground/pkg/download"
 	"github.com/amscanne/bpftrace-playground/pkg/evaluate"
@@ -15,17 +14,16 @@ import (
 )
 
 type Server struct {
-	router     *mux.Router
-	evaluator  *evaluate.Evaluator
-	template   *template.Template
-	maxTimeout int
+	router    *mux.Router
+	evaluator *evaluate.Evaluator
+	template  *template.Template
 }
 
 type PageData struct {
 	Code     string
 	Workload string
 	Version  string
-	Timeout  int
+	Timeout  string
 	Files    string
 }
 
@@ -44,10 +42,9 @@ func NewServer(cacheDir string, maxCache int, maxTimeout int) (*Server, error) {
 	}
 
 	s := &Server{
-		router:     mux.NewRouter(),
-		evaluator:  evaluate.NewEvaluator(downloader),
-		template:   tmpl,
-		maxTimeout: maxTimeout,
+		router:    mux.NewRouter(),
+		evaluator: evaluate.NewEvaluator(downloader, maxTimeout),
+		template:  tmpl,
 	}
 	s.routes()
 	return s, nil
@@ -67,7 +64,7 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 	filesB64 := r.URL.Query().Get("files")
 	workload := r.URL.Query().Get("workload")
 	version := r.URL.Query().Get("version")
-	timeoutStr := r.URL.Query().Get("timeout")
+	timeout := r.URL.Query().Get("timeout")
 
 	var code string
 	if codeB64 != "" {
@@ -96,16 +93,8 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
 		version = "latest"
 	}
-
-	timeout := s.maxTimeout
-	if timeoutStr != "" {
-		parsedTimeout, err := strconv.Atoi(timeoutStr)
-		if err != nil {
-			http.Error(w, "Bad timeout: "+err.Error(), http.StatusBadRequest)
-			return
-		} else if parsedTimeout >= 0 && parsedTimeout < s.maxTimeout {
-			timeout = parsedTimeout
-		}
+	if timeout == "" {
+		timeout = "3000" // Three seconds.
 	}
 
 	data := PageData{

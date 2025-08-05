@@ -12,8 +12,8 @@ import (
 var (
 	port       = flag.String("port", getEnvOrDefault("PORT", "8088"), "Port to listen on")
 	cacheDir   = flag.String("cache-dir", getEnvOrDefault("CACHE_DIR", "/tmp/cache"), "Cache directory")
-	maxCache   = flag.Int("max-cache", getEnvIntOrDefault("MAX_CACHE", 100), "Maximum cache entries")
-	maxTimeout = flag.Int("max-timeout", getEnvIntOrDefault("MAX_TIMEOUT", 30), "Maximum timeout in seconds")
+	maxCache   = flag.Int("max-cache", getEnvIntOrDefault("MAX_CACHE", 5), "Maximum cache entries")
+	maxTimeout = flag.Int("max-timeout", getEnvIntOrDefault("MAX_TIMEOUT", 30000), "Maximum timeout in milliseconds")
 )
 
 func getEnvOrDefault(key, defaultValue string) string {
