@@ -8,11 +8,13 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"time"
 
-	"github.com/bpftrace/bpftrace-playground/pkg/download"
-	"github.com/bpftrace/bpftrace-playground/pkg/evaluate"
-	"github.com/bpftrace/bpftrace-playground/pkg/workloads"
 	"github.com/gorilla/mux"
+
+	"github.com/bpftrace/playground/pkg/download"
+	"github.com/bpftrace/playground/pkg/evaluate"
+	"github.com/bpftrace/playground/pkg/workloads"
 )
 
 type Server struct {
@@ -95,7 +97,8 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		files = string(decoded)
 	} else {
-		files = "{}"
+		const emptyJSON = "{}"
+		files = emptyJSON
 	}
 
 	if version == "" {
@@ -116,6 +119,7 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 	err := s.template.Execute(w, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -126,7 +130,14 @@ func Main(port string, downloader *download.Manager, maxTimeout int) error {
 	}
 
 	log.Printf("Listening on port %s", port)
-	if err := http.ListenAndServe(":"+port, s); err != nil {
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      s,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("failed to listen and serve: %w", err)
 	}
 	return nil

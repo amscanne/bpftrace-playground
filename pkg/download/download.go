@@ -49,7 +49,7 @@ func NewManager(cacheDir string, maxCache int, owner, repo, workflow, token stri
 	}
 
 	var httpClient *http.Client
-	var tc context.Context = context.Background()
+	tc := context.Background()
 	if token != "" {
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 		httpClient = oauth2.NewClient(tc, ts)
@@ -74,6 +74,104 @@ func NewManager(cacheDir string, maxCache int, owner, repo, workflow, token stri
 	}, nil
 }
 
+func (m *Manager) findArtifactInRun(ctx context.Context, runID int64, artifactName string) (*github.Artifact, error) {
+	opts := &github.ListOptions{PerPage: 100}
+	for {
+		ars, resp, artifactErr := m.client.Actions.ListWorkflowRunArtifacts(ctx, m.owner, m.repo, runID, opts)
+		if artifactErr != nil {
+			return nil, artifactErr
+		}
+		for _, a := range ars.Artifacts {
+			if a.GetName() == artifactName {
+				return a, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return nil, nil
+}
+
+func (m *Manager) downloadArtifact(ctx context.Context, artifact *github.Artifact) (*bytes.Buffer, error) {
+	art, _, err := m.client.Actions.GetArtifact(ctx, m.owner, m.repo, artifact.GetID())
+	if err != nil {
+		return nil, err
+	}
+	url := art.GetArchiveDownloadURL()
+	if url == "" {
+		return nil, fmt.Errorf("artifact %d has no download URL", art.GetID())
+	}
+
+	// Download archive via httpClient (which includes auth if token provided).
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download artifact: %s", resp.Status)
+	}
+
+	buf := new(bytes.Buffer)
+	if _, copyErr := io.Copy(buf, resp.Body); copyErr != nil {
+		return nil, copyErr
+	}
+	return buf, nil
+}
+
+func (m *Manager) extractSingleFile(buf *bytes.Buffer, targetDir string) (string, error) {
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		return "", err
+	}
+
+	var singleFile *zip.File
+	fileCount := 0
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "/") {
+			continue
+		}
+		fileCount++
+		if fileCount > 1 {
+			return "", errors.New("multiple files in archive")
+		}
+		singleFile = f
+	}
+
+	if fileCount != 1 || singleFile == nil {
+		return "", errors.New("no single file found")
+	}
+
+	rc, err := singleFile.Open()
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+
+	outPath := filepath.Join(targetDir, filepath.Base(singleFile.Name))
+	outF, err := os.Create(outPath)
+	if err != nil {
+		return "", err
+	}
+	defer outF.Close()
+
+	//nolint:gosec // Artifacts from GitHub Actions are trusted
+	if _, err := io.Copy(outF, rc); err != nil {
+		return "", err
+	}
+
+	_ = os.Chmod(outPath, 0755)
+	return outPath, nil
+}
+
 // GetArtifact finds the appropriate workflow run and downloads the named artifact.
 // - artifactName: name of the artifact to download
 // - version: branch name, tag, or commit SHA to match against runs
@@ -83,15 +181,11 @@ func (m *Manager) GetArtifact(ctx context.Context, artifactName, version string)
 	defer m.mu.Unlock()
 
 	// Try to resolve from cache first.
-	var run *github.WorkflowRun
 	var resolvedSHA string
 
 	if entry, ok := m.versionCache[version]; ok {
 		if time.Since(entry.timestamp) < m.versionCacheTTL {
-			// Use cached resolution.
 			resolvedSHA = entry.sha
-
-			// Check if we have the artifact cached.
 			artifactKey := resolvedSHA + "|" + artifactName
 			if p, ok := m.cache[artifactKey]; ok {
 				return p, nil
@@ -99,9 +193,8 @@ func (m *Manager) GetArtifact(ctx context.Context, artifactName, version string)
 		}
 	}
 
-	// Find the run (either because cache miss or we need the run object for artifacts)
-	var err error
-	run, err = m.findRun(ctx, version)
+	// Find the run
+	run, err := m.findRun(ctx, version)
 	if err != nil {
 		return "", err
 	}
@@ -128,112 +221,37 @@ func (m *Manager) GetArtifact(ctx context.Context, artifactName, version string)
 		return p, nil
 	}
 
-	// List artifacts for the run.
-	opts := &github.ListOptions{PerPage: 100}
-	var artifact *github.Artifact
-	for {
-		ars, resp, err := m.client.Actions.ListWorkflowRunArtifacts(ctx, m.owner, m.repo, run.GetID(), opts)
-		if err != nil {
-			return "", err
-		}
-		for _, a := range ars.Artifacts {
-			if a.GetName() == artifactName {
-				artifact = a
-				break
-			}
-		}
-		if artifact != nil || resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
+	// Find the artifact
+	artifact, err := m.findArtifactInRun(ctx, run.GetID(), artifactName)
+	if err != nil {
+		return "", err
 	}
-
 	if artifact == nil {
 		return "", fmt.Errorf("artifact %q not found on run %d", artifactName, run.GetID())
 	}
 
-	// Get artifact metadata to obtain download URL.
-	art, _, err := m.client.Actions.GetArtifact(ctx, m.owner, m.repo, artifact.GetID())
-	if err != nil {
-		return "", err
-	}
-	url := art.GetArchiveDownloadURL()
-	if url == "" {
-		return "", fmt.Errorf("artifact %d has no download URL", art.GetID())
-	}
-
-	// Download archive via httpClient (which includes auth if token provided).
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	// Download the artifact
+	buf, err := m.downloadArtifact(ctx, artifact)
 	if err != nil {
 		return "", err
 	}
 
-	// The go-github client uses the same httpClient with auth; using it here is fine.
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download artifact: %s", resp.Status)
-	}
-
-	// Read all into memory first (artifacts are usually small). If large artifacts are expected,
-	// this can be changed to stream to disk.
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, resp.Body); err != nil {
-		return "", err
-	}
-
-	// Write to cache directory. Use an identifier based on resolved SHA.
+	// Write to cache directory
 	targetDir := filepath.Join(m.cacheDir, resolvedSHA)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return "", err
+	if mkdirErr := os.MkdirAll(targetDir, 0755); mkdirErr != nil {
+		return "", mkdirErr
 	}
 
-	// Save as zip file then try to extract if it contains a single file.
+	// Save as zip file
 	zipPath := filepath.Join(targetDir, artifactName+".zip")
-	if err := os.WriteFile(zipPath, buf.Bytes(), 0644); err != nil {
-		return "", err
+	if writeErr := os.WriteFile(zipPath, buf.Bytes(), 0600); writeErr != nil {
+		return "", writeErr
 	}
 
-	// Attempt to unzip and if there's exactly one top-level file, return that path instead.
-	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-	if err == nil {
-		// Inspect files
-		var singleFile *zip.File
-		fileCount := 0
-		for _, f := range zr.File {
-			// skip directories
-			if strings.HasSuffix(f.Name, "/") {
-				continue
-			}
-			fileCount++
-			if fileCount > 1 {
-				break
-			}
-			singleFile = f
-		}
-		if fileCount == 1 && singleFile != nil {
-			// Extract the single file.
-			rc, err := singleFile.Open()
-			if err == nil {
-				outPath := filepath.Join(targetDir, filepath.Base(singleFile.Name))
-				outF, err := os.Create(outPath)
-				if err == nil {
-					if _, err := io.Copy(outF, rc); err == nil {
-						outF.Close()
-						rc.Close()
-						_ = os.Chmod(outPath, 0755)
-						m.addCache(resolvedSHA, artifactName, outPath)
-						return outPath, nil
-					}
-					outF.Close()
-				}
-				rc.Close()
-			}
-		}
+	// Try to extract single file
+	if extractedPath, err := m.extractSingleFile(buf, targetDir); err == nil {
+		m.addCache(resolvedSHA, artifactName, extractedPath)
+		return extractedPath, nil
 	}
 
 	// Fallback: return zip path

@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func getCommand(ctx context.Context, workload string, path string, code string) *exec.Cmd {
+func getCommand(ctx context.Context, workload, path, code string) *exec.Cmd {
 	args := []string{path}
 	if workload != "" {
 		childCommand := fmt.Sprintf("/proc/self/exe %s", workload)

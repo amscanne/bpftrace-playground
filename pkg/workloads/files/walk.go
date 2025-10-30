@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bpftrace/bpftrace-playground/pkg/workloads"
+	"github.com/bpftrace/playground/pkg/workloads"
 )
 
 // walker walks the full directory tree, and reads the contents

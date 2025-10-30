@@ -3,7 +3,7 @@ package basic
 import (
 	"time"
 
-	"github.com/bpftrace/bpftrace-playground/pkg/workloads"
+	"github.com/bpftrace/playground/pkg/workloads"
 )
 
 // sleeper just sleeps for a short period of time.

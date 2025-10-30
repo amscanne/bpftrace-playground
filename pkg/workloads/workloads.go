@@ -23,12 +23,12 @@ func Register(w Workload) {
 }
 
 // Returned if the workload cannot be found.
-type ErrWorkloadNotFound struct {
+type ErrWorkloadNotFoundError struct {
 	Name string
 }
 
 // Error implements error.Error.
-func (e ErrWorkloadNotFound) Error() string {
+func (e ErrWorkloadNotFoundError) Error() string {
 	return "workload not found: " + e.Name
 }
 
@@ -36,14 +36,14 @@ func (e ErrWorkloadNotFound) Error() string {
 func Run(name string) error {
 	w, exists := registered[name]
 	if !exists {
-		return ErrWorkloadNotFound{name}
+		return ErrWorkloadNotFoundError{name}
 	}
 	return w.Execute()
 }
 
 // List returns the set of available workloads.
 func List() []string {
-	var names []string
+	names := make([]string, 0, len(registered))
 	for name := range registered {
 		names = append(names, name)
 	}

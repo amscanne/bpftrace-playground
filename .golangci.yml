@@ -1,0 +1,68 @@
+linters-settings:
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/bpftrace/playground
+  golint:
+    min-confidence: 0
+  gomnd:
+    settings:
+      mnd:
+        checks: argument,case,condition,return
+  govet:
+    check-shadowing: true
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+
+linters:
+  enable-all: true
+  disable:
+    - gochecknoinits   # used for workload registration
+    - depguard         # Too restrictive for this project
+    - cyclop           # Use gocyclo instead
+    - contextcheck     # Context usage is intentional
+    - err113           # Dynamic errors are fine for this project
+    - errchkjson       # JSON marshal errors are intentionally ignored in websocket streaming
+    - exhaustruct      # Too verbose for struct initialization
+    - funlen           # Function length is managed by gocyclo
+    - gci              # Import grouping conflicts with goimports
+    - gochecknoglobals # Flag variables and registries are acceptable globals
+    - godot            # Comment punctuation is too strict
+    - gofumpt          # gofmt is sufficient
+    - mnd              # Magic number detection is too aggressive
+    - nilnil           # Returning nil,nil for not-found is acceptable
+    - nlreturn         # Blank line rules are too strict
+    - noctx            # http.Get is acceptable for simple use cases
+    - paralleltest     # Not all tests need to be parallel
+    - perfsprint       # String concatenation preference is minor
+    - tagliatelle      # JSON tag naming is intentional
+    - testpackage      # Test package naming is developer preference
+    - varnamelen       # Short variable names are idiomatic in Go
+    - wrapcheck        # Error wrapping is handled where needed
+    - wsl              # Whitespace linting is too opinionated
+
+issues:
+  exclude-rules:
+    - linters:
+        - revive
+      text: "unused-parameter"
+    - linters:
+        - gocritic
+      text: "octalLiteral"
+
+run:
+  timeout: 5m

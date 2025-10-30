@@ -6,12 +6,12 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/bpftrace/bpftrace-playground/pkg/download"
-	"github.com/bpftrace/bpftrace-playground/pkg/service"
-	"github.com/bpftrace/bpftrace-playground/pkg/workloads"
-	_ "github.com/bpftrace/bpftrace-playground/pkg/workloads/basic"
-	_ "github.com/bpftrace/bpftrace-playground/pkg/workloads/files"
-	_ "github.com/bpftrace/bpftrace-playground/pkg/workloads/network"
+	"github.com/bpftrace/playground/pkg/download"
+	"github.com/bpftrace/playground/pkg/service"
+	"github.com/bpftrace/playground/pkg/workloads"
+	_ "github.com/bpftrace/playground/pkg/workloads/basic"
+	_ "github.com/bpftrace/playground/pkg/workloads/files"
+	_ "github.com/bpftrace/playground/pkg/workloads/network"
 )
 
 var (
@@ -44,7 +44,8 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 func main() {
 	flag.Parse()
 
-	if flag.NArg() == 0 {
+	switch flag.NArg() {
+	case 0:
 		downloader, err := download.NewManager(*cacheDir, *maxCache, *owner, *repo, *workflow, *token)
 		if err != nil {
 			log.Fatalf("Downloader failed: %v", err)
@@ -52,12 +53,12 @@ func main() {
 		if err := service.Main(*port, downloader, *maxTimeout); err != nil {
 			log.Fatalf("Server failed: %v", err)
 		}
-	} else if flag.NArg() == 1 {
+	case 1:
 		arg := flag.Args()[0]
 		if err := workloads.Run(arg); err != nil {
 			log.Fatalf("failed: %v", err)
 		}
-	} else {
+	default:
 		flag.PrintDefaults()
 		os.Exit(1)
 	}

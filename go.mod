@@ -1,4 +1,4 @@
-module github.com/bpftrace/bpftrace-playground
+module github.com/bpftrace/playground
 
 go 1.23
 
