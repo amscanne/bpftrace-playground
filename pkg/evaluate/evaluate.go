@@ -8,21 +8,23 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/amscanne/bpftrace-playground/pkg/download"
+	"github.com/bpftrace/bpftrace-playground/pkg/download"
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 )
 
 // Request is the input to an evaluate request.
 type Request struct {
-	Version string            `json:"version"`
-	Code    string            `json:"code"`
-	Files   map[string]string `json:"files"`
-	Timeout int               `json:"timeout"`
+	Version  string            `json:"version"`
+	Code     string            `json:"code"`
+	Files    map[string]string `json:"files"`
+	Timeout  int               `json:"timeout"`
+	Workload string            `json:"workload"`
 }
 
 // ExitData is the data for an exit message.
@@ -118,7 +120,16 @@ func (e *Evaluator) ExecuteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	bpftracePath, err := e.downloader.Get(req.Version)
+	var artifactName string
+	if runtime.GOARCH == "amd64" {
+		artifactName = "bpftrace-X64"
+	} else if runtime.GOARCH == "arm64" {
+		artifactName = "bpftrace-ARM64"
+	} else {
+		fail(fmt.Errorf("unable architecture: %s", runtime.GOARCH))
+		return
+	}
+	bpftracePath, err := e.downloader.GetArtifact(context.Background(), artifactName, req.Version)
 	if err != nil {
 		fail(fmt.Errorf("Failed to download binary: %v", err))
 		return
@@ -131,7 +142,7 @@ func (e *Evaluator) ExecuteHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Millisecond)
 	defer cancel()
 
-	cmd := getCommand(ctx, bpftracePath, req.Code)
+	cmd := getCommand(ctx, req.Workload, bpftracePath, req.Code)
 	cmd.Dir = tempDir // Run in the working directory.
 
 	ptmx, err := pty.Start(cmd)

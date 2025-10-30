@@ -3,13 +3,15 @@ package service
 import (
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 
-	"github.com/amscanne/bpftrace-playground/pkg/download"
-	"github.com/amscanne/bpftrace-playground/pkg/evaluate"
+	"github.com/bpftrace/bpftrace-playground/pkg/download"
+	"github.com/bpftrace/bpftrace-playground/pkg/evaluate"
+	"github.com/bpftrace/bpftrace-playground/pkg/workloads"
 	"github.com/gorilla/mux"
 )
 
@@ -30,12 +32,7 @@ type PageData struct {
 //go:embed templates/*.html
 var templateFiles embed.FS
 
-func NewServer(cacheDir string, maxCache int, maxTimeout int) (*Server, error) {
-	downloader, err := download.NewManager(cacheDir, maxCache)
-	if err != nil {
-		return nil, err
-	}
-
+func NewServer(downloader *download.Manager, maxTimeout int) (*Server, error) {
 	tmpl, err := template.ParseFS(templateFiles, "templates/index.html")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
@@ -56,7 +53,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes() {
 	s.router.HandleFunc("/execute", s.evaluator.ExecuteHandler)
+	s.router.HandleFunc("/workloads", s.workloadsHandler)
 	s.router.HandleFunc("/", s.embedHandler)
+}
+
+func (s *Server) workloadsHandler(w http.ResponseWriter, r *http.Request) {
+	// Just return the workloads as a JSON-encoded list.
+	workloads := workloads.List()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(workloads); err != nil {
+		http.Error(w, "Failed to encode workloads", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +99,7 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if version == "" {
-		version = "latest"
+		version = "master"
 	}
 	if timeout == "" {
 		timeout = "3000" // Three seconds.
@@ -111,8 +119,8 @@ func (s *Server) embedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Main(port string, cacheDir string, maxCache int, maxTimeout int) error {
-	s, err := NewServer(cacheDir, maxCache, maxTimeout)
+func Main(port string, downloader *download.Manager, maxTimeout int) error {
+	s, err := NewServer(downloader, maxTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
